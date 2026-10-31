@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Si hay un .zip en el repo, lo descomprime y compila el proyecto que lleve dentro.
+      # Si no hay .zip, compila el repo tal cual (build.gradle.kts en la raiz).
+      - name: Preparar proyecto
+        run: |
+          shopt -s nullglob
+          zips=(*.zip)
+          if [ ${#zips[@]} -gt 0 ]; then
+            mkdir -p _src
+            unzip -q -o "${zips[0]}" -d _src
+            gradle_file=$(find _src -name build.gradle.kts | head -n1)
+            if [ -z "$gradle_file" ]; then
+              echo "El zip no contiene build.gradle.kts"; exit 1
+            fi
+            echo "PROJECT_DIR=$(dirname "$gradle_file")" >> "$GITHUB_ENV"
+          else
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+
+      - name: Compilar
+        run: gradle build --no-daemon -p "$PROJECT_DIR"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DesafioExtremo
+          path: ${{ env.PROJECT_DIR }}/build/libs/*.jar
